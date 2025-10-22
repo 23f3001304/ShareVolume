@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEC Data Visualization</title>
+    <!-- UID: 74137277013265393270223405150312602244255776286400930763990759493080780670956 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-background: #0a0a0f;
+            --color-foreground: #101018;
+            --color-text: #e1e1e6;
+            --color-text-muted: #8d8d99;
+            --color-accent: #0077ff;
+            --color-accent-glow: rgba(0, 119, 255, 0.2);
+
+            --font-family-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --spacing-unit: 1rem;
+            
+            --grid-gap: calc(var(--spacing-unit) * 2);
+            --content-width: 1200px;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        body {
+            background-color: var(--color-background);
+            color: var(--color-text);
+            font-family: var(--font-family-main);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.7;
+        }
+
+        .container {
+            width: 100%;
+            max-width: var(--content-width);
+            margin: 0 auto;
+            padding: calc(var(--spacing-unit) * 4) calc(var(--spacing-unit) * 2);
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            padding: var(--grid-gap) 0;
+            margin-bottom: calc(var(--grid-gap) * 2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: white;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--grid-gap);
+        }
+
+        .grid-item {
+            background-color: var(--color-foreground);
+            padding: calc(var(--spacing-unit) * 2);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px var(--color-accent-glow);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .grid-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 48px var(--color-accent-glow);
+        }
+
+        .card-header {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-text);
+            margin-bottom: var(--spacing-unit);
+            display: flex;
+            align-items: center;
+        }
+
+        .card-header::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.25rem;
+            margin-right: 0.75rem;
+            background-color: var(--color-accent);
+            border-radius: 2px;
+        }
+
+        .card-content {
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: -0.03em;
+            color: white;
+        }
+
+        .card-footer {
+            margin-top: calc(var(--spacing-unit) / 2);
+            font-size: 1rem;
+            color: var(--color-text-muted);
+        }
+
+        .loader, .error-message {
+            text-align: center;
+            padding: calc(var(--grid-gap) * 2);
+            font-size: 1.2rem;
+            display: none;
+        }
+
+        .loader.visible, .error-message.visible {
+            display: block;
+        }
+
+        .hidden-visually {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.25rem;
+            }
+            .card-content {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <main class="container">
+        <header>
+            <h1 id="share-entity-name" class="hidden-visually">Loading Company...</h1>
+        </header>
+
+        <div id="loader" class="loader visible">Fetching data from SEC...</div>
+        <div id="error-message" class="error-message"></div>
+
+        <section id="data-display" class="grid-container">
+            <div class="grid-item hidden-visually">
+                <div class="card-header">Highest Shares Outstanding</div>
+                <div id="share-max-value" class="card-content">-</div>
+                <div class="card-footer">Fiscal Year: <span id="share-max-fy">-</span></div>
+            </div>
+            <div class="grid-item hidden-visually">
+                <div class="card-header">Lowest Shares Outstanding</div>
+                <div id="share-min-value" class="card-content">-</div>
+                <div class="card-footer">Fiscal Year: <span id="share-min-fy">-</span></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" integrity="sha512-dLxUelApnYxpLt6K2iomGngnHO83iUvZytA3YjDUCjT0HDOHKXnVYdf3hU4JjM8uEhG9KlU6kTsHwSQIE8K8jw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.3/gsap.min.js" integrity="sha512-gmwBmiTVER57KfnYS0ssVR2RuffbglAW4G9DMLcH/uHkHvyigNcoHIRngXaYGSOTLDGiiEXDj7rKveldTsCngA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.3/ScrollTrigger.min.js" integrity="sha512-gtb40AlO3OfdMdxnJ3Ac/8lMV5A+bFnCSKOt7R6bJIOlG0Y6OdnT3KeGvjCx2St0A08T+G+lIKc0gtrgT4yGxg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js" integrity="sha512-z4OUqw38qNLpn1libAN9BsoDx6nbNFio5lA6CuTp9NlK83b89hgyCVq+N5FdBJptINztxn1Z3SaKSKUS5UP60Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            gsap.registerPlugin(ScrollTrigger);
+
+            // --- MODULE 1: THREE.JS VISUALS ---
+            let scene, camera, renderer, material, mesh;
+            const initThree = () => {
+                const canvas = document.getElementById('bg-canvas');
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.z = 1;
+                
+                renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+                const geometry = new THREE.PlaneGeometry(5, 5, 32, 32);
+
+                const vertexShader = `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `;
+
+                const fragmentShader = `
+                    uniform float u_time;
+                    uniform vec2 u_resolution;
+                    varying vec2 vUv;
+
+                    float random(vec2 st) {
+                        return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+                    }
+
+                    float noise(vec2 st) {
+                        vec2 i = floor(st);
+                        vec2 f = fract(st);
+                        float a = random(i);
+                        float b = random(i + vec2(1.0, 0.0));
+                        float c = random(i + vec2(0.0, 1.0));
+                        float d = random(i + vec2(1.0, 1.0));
+                        vec2 u = f * f * (3.0 - 2.0 * f);
+                        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.y * u.x;
+                    }
+
+                    void main() {
+                        vec2 st = vUv * 5.0;
+                        st.x *= u_resolution.x / u_resolution.y;
+                        float n = noise(st + u_time * 0.1);
+                        gl_FragColor = vec4(vec3(n * 0.1, n * 0.15, n * 0.3), 0.5);
+                    }
+                `;
+
+                material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        u_time: { value: 0 },
+                        u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                    },
+                    vertexShader,
+                    fragmentShader,
+                });
+
+                mesh = new THREE.Mesh(geometry, material);
+                scene.add(mesh);
+                
+                animate();
+            };
+
+            const animate = () => {
+                requestAnimationFrame(animate);
+                material.uniforms.u_time.value += 0.01;
+                renderer.render(scene, camera);
+            };
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                material.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+            });
+
+            initThree();
+
+            // --- MODULE 2: DATA FETCHING & PROCESSING ---
+            const fetchCompanyData = async (cik) => {
+                const url = `https://data.sec.gov/api/xbrl/companyconcept/CIK${cik}/dei/EntityCommonStockSharesOutstanding.json`;
+                const headers = { 'User-Agent': 'Personal Project student@example.com' };
+                
+                try {
+                    const response = await fetch(url, { headers });
+                    if (!response.ok) {
+                        throw new Error(`SEC API Error: ${response.status} ${response.statusText}`);
+                    }
+                    const data = await response.json();
+
+                    const entityName = data.entityName;
+                    const sharesData = data.units.shares
+                        .filter(item => item.fy > 2020 && !isNaN(parseFloat(item.val)))
+                        .map(item => ({ ...item, val: Number(item.val) }));
+
+                    if (sharesData.length === 0) {
+                        throw new Error(`No shares data found for CIK ${cik} after 2020.`);
+                    }
+
+                    const max = sharesData.reduce((prev, current) => (prev.val > current.val) ? prev : current);
+                    const min = sharesData.reduce((prev, current) => (prev.val < current.val) ? prev : current);
+
+                    return { entityName, max, min };
+
+                } catch (error) {
+                    console.error("Failed to fetch or process company data:", error);
+                    throw error;
+                }
+            };
+            
+            // --- MODULE 3: DOM MANIPULATION ---
+            const ui = {
+                title: document.querySelector('title'),
+                entityName: document.getElementById('share-entity-name'),
+                maxValue: document.getElementById('share-max-value'),
+                maxFy: document.getElementById('share-max-fy'),
+                minValue: document.getElementById('share-min-value'),
+                minFy: document.getElementById('share-min-fy'),
+                loader: document.getElementById('loader'),
+                errorMessage: document.getElementById('error-message'),
+                dataDisplay: document.getElementById('data-display')
+            };
+            
+            const numberFormatter = new Intl.NumberFormat('en-US');
+
+            const updateDOM = (data) => {
+                const formattedMax = numberFormatter.format(data.max.val);
+                const formattedMin = numberFormatter.format(data.min.val);
+
+                ui.title.textContent = `${data.entityName} | Share Data`;
+                ui.entityName.textContent = data.entityName;
+                ui.maxValue.textContent = formattedMax;
+                ui.maxFy.textContent = data.max.fy;
+                ui.minValue.textContent = formattedMin;
+                ui.minFy.textContent = data.min.fy;
+                
+                // Animate numbers
+                animateNumber(ui.maxValue, data.max.val);
+                animateNumber(ui.minValue, data.min.val);
+            };
+
+            const showError = (message) => {
+                ui.dataDisplay.style.display = 'none';
+                ui.loader.classList.remove('visible');
+                ui.errorMessage.textContent = `Error: ${message}. Please check the CIK or try again later.`;
+                ui.errorMessage.classList.add('visible');
+                ui.entityName.textContent = 'Data Unavailable';
+            };
+
+            const hideError = () => {
+                ui.dataDisplay.style.display = 'grid';
+                ui.errorMessage.classList.remove('visible');
+                ui.errorMessage.textContent = '';
+            };
+
+
+            // --- MODULE 4: ANIMATION ---
+            const animateNumber = (element, finalValue) => {
+                let proxy = { value: 0 };
+                anime({
+                    targets: proxy,
+                    value: finalValue,
+                    round: 1,
+                    easing: 'easeOutExpo',
+                    duration: 1500,
+                    update: function() {
+                        element.innerHTML = numberFormatter.format(proxy.value);
+                    }
+                });
+            };
+
+            const playIntroAnimation = () => {
+                const tl = gsap.timeline();
+                tl.to("header h1", {
+                    opacity: 1,
+                    y: 0,
+                    duration: 0.8,
+                    ease: "power3.out"
+                }).to(".grid-item", {
+                    opacity: 1,
+                    y: 0,
+                    duration: 0.6,
+                    ease: "power3.out",
+                    stagger: 0.15
+                }, "-=0.5");
+            };
+
+            const playUpdateAnimation = (updateCallback) => {
+                const tl = gsap.timeline({ onComplete: updateCallback });
+                tl.to(".grid-item", {
+                    opacity: 0,
+                    y: -20,
+                    duration: 0.4,
+                    ease: "power2.in",
+                    stagger: 0.1
+                }).to("header h1", {
+                    opacity: 0,
+                    y: -20,
+                    duration: 0.4,
+                    ease: "power2.in"
+                }, "<");
+            };
+
+
+            // --- MODULE 5: INITIALIZATION & ORCHESTRATION ---
+            const main = async () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const cikParam = urlParams.get('CIK');
+                const defaultCik = '0000875045';
+                
+                let cik = defaultCik;
+                let isUpdate = false;
+                if (cikParam && /^\d{10}$/.test(cikParam)) {
+                    cik = cikParam;
+                    isUpdate = true;
+                }
+
+                ui.loader.classList.add('visible');
+                hideError();
+
+                if (isUpdate) {
+                    playUpdateAnimation(async () => {
+                        try {
+                            const data = await fetchCompanyData(cik);
+                            updateDOM(data);
+                            ui.loader.classList.remove('visible');
+                            playIntroAnimation();
+                        } catch (e) {
+                            showError(e.message);
+                        }
+                    });
+                } else {
+                    try {
+                        const data = await fetchCompanyData(cik);
+                        updateDOM(data);
+                        ui.loader.classList.remove('visible');
+                        playIntroAnimation();
+                    } catch (e) {
+                        showError(e.message);
+                    }
+                }
+            };
+            
+            main();
+        });
+    </script>
+</body>
+</html>
